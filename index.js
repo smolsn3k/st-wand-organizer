@@ -43,6 +43,10 @@ function getItems() {
         if (!leaves.length) leaves = [top];
 
         for (const el of leaves) {
+            // skip empty placeholders (containers of disabled/inactive extensions)
+            const hasContent = (el.textContent || '').trim() || el.title;
+            if (!hasContent) continue;
+
             let key = el.id || getText(el);
             if (seen.has(key)) key = `${key}#${seen.size}`;
             seen.add(key);
