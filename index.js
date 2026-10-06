@@ -58,10 +58,37 @@ function getItems() {
 
 /* ---------- applying hide / order ---------- */
 
+let observer = null;
+const originalOrder = [];
+
+/** Physically reorder the menu's children to match the saved order. */
+function reorderDom(items, s) {
+    const menu = document.querySelector(MENU);
+    if (!menu) return;
+
+    const rank = new Map();
+    for (const { top, key } of items) {
+        const r = s.order.indexOf(key);
+        rank.set(top, Math.min(rank.get(top) ?? Infinity, r));
+    }
+
+    const current = [...menu.children];
+    const sorted = [...current].sort((a, b) => (rank.get(a) ?? 1e9) - (rank.get(b) ?? 1e9));
+    if (sorted.every((el, i) => el === current[i])) return;
+
+    sorted.forEach(el => menu.appendChild(el));
+    observer?.takeRecords(); // ignore our own DOM changes
+}
+
 function apply() {
     const s = getSettings();
     const items = getItems();
     let changed = false;
+
+    // remember the order items first appeared in (used by "Reset order")
+    for (const { key } of items) {
+        if (!originalOrder.includes(key)) originalOrder.push(key);
+    }
 
     // make sure every present item has a slot in the saved order
     for (const { key } of items) {
@@ -73,8 +100,10 @@ function apply() {
 
     for (const { el, top, key } of items) {
         el.classList.toggle(HIDE_CLASS, !!s.hidden[key]);
-        top.style.order = String(s.order.indexOf(key));
+        top.style.order = '';
     }
+
+    reorderDom(items, s);
 
     // hide wrapper containers whose entries are all hidden
     const tops = new Set(items.map(i => i.top));
@@ -183,11 +212,8 @@ function buildUI() {
     });
 
     $('#wandorg_reset_order').on('click', () => {
-        getSettings().order = [];
+        getSettings().order = [...originalOrder];
         saveSettingsDebounced();
-        // order is rebuilt from the current DOM order... which we've been
-        // overriding with CSS, so clear inline order first and re-read.
-        getItems().forEach(({ top }) => (top.style.order = ''));
         apply();
         renderList();
     });
@@ -216,7 +242,8 @@ jQuery(() => {
 
     // other extensions add their wand items at various times, so keep watching
     const target = document.querySelector(MENU) || document.body;
-    new MutationObserver(scheduleApply).observe(target, { childList: true, subtree: true });
+    observer = new MutationObserver(scheduleApply);
+    observer.observe(target, { childList: true, subtree: true });
 
     // a couple of delayed passes for late-loading extensions
     setTimeout(apply, 2000);
