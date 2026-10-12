@@ -5,6 +5,49 @@ const MODULE = 'wandOrganizer';
 const MENU = '#extensionsMenu';
 const HIDE_CLASS = 'wandorg-hidden';
 
+/* ---------- translations ---------- */
+
+const I18N = {
+    en: {
+        title: 'Wand Organizer',
+        hint: 'Tick an item to show it in the magic wand menu. Hold and drag the handle to reorder.',
+        showAll: 'Show all',
+        resetOrder: 'Reset order',
+        rescan: 'Rescan',
+        language: 'Language',
+        auto: 'Auto',
+        empty: 'No wand items found yet.',
+        drag: 'Drag to reorder',
+    },
+    ru: {
+        title: 'Организатор волшебной палочки',
+        hint: 'Отметьте пункты, которые должны отображаться в меню волшебной палочки. Удерживайте и перетаскивайте ручку, чтобы изменить порядок.',
+        showAll: 'Показать все',
+        resetOrder: 'Сбросить порядок',
+        rescan: 'Обновить',
+        language: 'Язык',
+        auto: 'Авто',
+        empty: 'Пункты меню пока не найдены.',
+        drag: 'Перетащите, чтобы изменить порядок',
+    },
+};
+
+function currentLang() {
+    const l = getSettings().lang;
+    if (l === 'en' || l === 'ru') return l;
+    return (navigator.language || 'en').toLowerCase().startsWith('ru') ? 'ru' : 'en';
+}
+
+function t(key) {
+    return I18N[currentLang()][key] ?? I18N.en[key] ?? key;
+}
+
+function applyTranslations() {
+    $('.wandorg-settings [data-i18n]').each(function () {
+        $(this).text(t($(this).data('i18n')));
+    });
+}
+
 /* ---------- settings ---------- */
 
 function getSettings() {
@@ -12,6 +55,7 @@ function getSettings() {
     const s = extension_settings[MODULE];
     if (!s.hidden || typeof s.hidden !== 'object') s.hidden = {};
     if (!Array.isArray(s.order)) s.order = [];
+    if (!s.lang) s.lang = 'auto';
     return s;
 }
 
@@ -59,6 +103,7 @@ function getItems() {
 /* ---------- applying hide / order ---------- */
 
 let observer = null;
+let dragging = false;
 const originalOrder = [];
 
 /** Physically reorder the menu's children to match the saved order. */
@@ -81,6 +126,8 @@ function reorderDom(items, s) {
 }
 
 function apply() {
+    if (dragging) return;
+
     const s = getSettings();
     const items = getItems();
     let changed = false;
@@ -116,9 +163,111 @@ function apply() {
     if (changed) saveSettingsDebounced();
 }
 
+/* ---------- drag and drop (mouse + touch) ---------- */
+
+function getScrollParent(el) {
+    let p = el.parentElement;
+    while (p && p !== document.body) {
+        const oy = getComputedStyle(p).overflowY;
+        if ((oy === 'auto' || oy === 'scroll') && p.scrollHeight > p.clientHeight) return p;
+        p = p.parentElement;
+    }
+    return document.scrollingElement || document.documentElement;
+}
+
+function commitListOrder(listEl) {
+    const s = getSettings();
+    const keys = [...listEl.children].map(r => r.dataset.key).filter(Boolean);
+    const stale = s.order.filter(k => !keys.includes(k));
+    s.order = [...keys, ...stale];
+    saveSettingsDebounced();
+    apply();
+}
+
+function enableDrag(handleEl, rowEl, listEl) {
+    handleEl.addEventListener('contextmenu', e => e.preventDefault());
+
+    handleEl.addEventListener('pointerdown', (e) => {
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        e.preventDefault();
+
+        dragging = true;
+        handleEl.setPointerCapture(e.pointerId);
+        rowEl.classList.add('wandorg-dragging');
+
+        const grabOffset = e.clientY - rowEl.getBoundingClientRect().top;
+        const scroller = getScrollParent(listEl);
+        const isDoc = scroller === document.scrollingElement || scroller === document.documentElement;
+        let lastY = e.clientY;
+        let raf = null;
+
+        const place = (desiredTop) => {
+            rowEl.style.transform = '';
+            const natural = rowEl.getBoundingClientRect().top;
+            rowEl.style.transform = `translateY(${desiredTop - natural}px)`;
+        };
+
+        const update = () => {
+            const desiredTop = lastY - grabOffset;
+            place(desiredTop);
+
+            const center = desiredTop + rowEl.offsetHeight / 2;
+
+            let next = rowEl.nextElementSibling;
+            while (next && center > next.getBoundingClientRect().top + next.offsetHeight / 2) {
+                listEl.insertBefore(next, rowEl);
+                next = rowEl.nextElementSibling;
+            }
+
+            let prev = rowEl.previousElementSibling;
+            while (prev && center < prev.getBoundingClientRect().top + prev.offsetHeight / 2) {
+                listEl.insertBefore(rowEl, prev);
+                prev = rowEl.previousElementSibling;
+            }
+
+            place(desiredTop);
+        };
+
+        const loop = () => {
+            // auto-scroll when dragging near the top/bottom edge
+            const rect = isDoc ? { top: 0, bottom: window.innerHeight } : scroller.getBoundingClientRect();
+            const top = Math.max(rect.top, 0);
+            const bottom = Math.min(rect.bottom, window.innerHeight);
+            const edge = 70;
+            let speed = 0;
+            if (lastY < top + edge) speed = -Math.ceil((top + edge - lastY) / 5);
+            else if (lastY > bottom - edge) speed = Math.ceil((lastY - (bottom - edge)) / 5);
+            if (speed) scroller.scrollTop += speed;
+
+            update();
+            raf = requestAnimationFrame(loop);
+        };
+
+        const onMove = (ev) => { lastY = ev.clientY; };
+
+        const end = () => {
+            cancelAnimationFrame(raf);
+            handleEl.removeEventListener('pointermove', onMove);
+            handleEl.removeEventListener('pointerup', end);
+            handleEl.removeEventListener('pointercancel', end);
+            rowEl.style.transform = '';
+            rowEl.classList.remove('wandorg-dragging');
+            dragging = false;
+            commitListOrder(listEl);
+        };
+
+        handleEl.addEventListener('pointermove', onMove);
+        handleEl.addEventListener('pointerup', end);
+        handleEl.addEventListener('pointercancel', end);
+        raf = requestAnimationFrame(loop);
+    });
+}
+
 /* ---------- settings UI ---------- */
 
 function renderList() {
+    if (dragging) return;
+
     const $list = $('#wandorg_list');
     if (!$list.length) return;
 
@@ -128,12 +277,15 @@ function renderList() {
     $list.empty();
 
     if (!items.length) {
-        $list.append('<div class="wandorg-empty">No wand items found yet.</div>');
+        $list.append($('<div class="wandorg-empty"></div>').text(t('empty')));
         return;
     }
 
-    items.forEach((item, i) => {
+    const listEl = $list[0];
+
+    for (const item of items) {
         const $row = $('<div class="wandorg-row"></div>');
+        $row[0].dataset.key = item.key;
 
         const $label = $('<label class="wandorg-label"></label>');
         const $cb = $('<input type="checkbox">').prop('checked', !s.hidden[item.key]);
@@ -148,30 +300,12 @@ function renderList() {
             apply();
         });
 
-        const $btns = $('<div class="wandorg-btns"></div>');
-        const $up = $('<div class="menu_button wandorg-move fa-solid fa-arrow-up" title="Move up"></div>');
-        const $down = $('<div class="menu_button wandorg-move fa-solid fa-arrow-down" title="Move down"></div>');
-        if (i === 0) $up.addClass('disabled');
-        if (i === items.length - 1) $down.addClass('disabled');
+        const $handle = $('<div class="wandorg-handle fa-solid fa-grip-lines"></div>').attr('title', t('drag'));
+        enableDrag($handle[0], $row[0], listEl);
 
-        const move = (dir) => {
-            const j = i + dir;
-            if (j < 0 || j >= items.length) return;
-            const keys = items.map(x => x.key);
-            [keys[i], keys[j]] = [keys[j], keys[i]];
-            const stale = s.order.filter(k => !keys.includes(k));
-            s.order = [...keys, ...stale];
-            saveSettingsDebounced();
-            apply();
-            renderList();
-        };
-        $up.on('click', () => move(-1));
-        $down.on('click', () => move(1));
-
-        $btns.append($up, $down);
-        $row.append($label, $btns);
+        $row.append($label, $handle);
         $list.append($row);
-    });
+    }
 }
 
 function buildUI() {
@@ -179,20 +313,30 @@ function buildUI() {
     <div class="wandorg-settings">
         <div class="inline-drawer">
             <div class="inline-drawer-toggle inline-drawer-header">
-                <b>Wand Organizer</b>
+                <b data-i18n="title"></b>
                 <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
             </div>
             <div class="inline-drawer-content">
-                <small class="wandorg-hint">Tick to show an item in the magic wand menu. Use the arrows to reorder.</small>
+                <small class="wandorg-hint" data-i18n="hint"></small>
+
+                <div class="wandorg-lang">
+                    <span data-i18n="language"></span>
+                    <select id="wandorg_lang" class="text_pole">
+                        <option value="auto" data-i18n="auto"></option>
+                        <option value="en">English</option>
+                        <option value="ru">Русский</option>
+                    </select>
+                </div>
+
                 <div class="wandorg-actions">
                     <div id="wandorg_show_all" class="menu_button menu_button_icon">
-                        <i class="fa-solid fa-eye"></i><span>Show all</span>
+                        <i class="fa-solid fa-eye"></i><span data-i18n="showAll"></span>
                     </div>
                     <div id="wandorg_reset_order" class="menu_button menu_button_icon">
-                        <i class="fa-solid fa-rotate-left"></i><span>Reset order</span>
+                        <i class="fa-solid fa-rotate-left"></i><span data-i18n="resetOrder"></span>
                     </div>
                     <div id="wandorg_refresh" class="menu_button menu_button_icon">
-                        <i class="fa-solid fa-arrows-rotate"></i><span>Rescan</span>
+                        <i class="fa-solid fa-arrows-rotate"></i><span data-i18n="rescan"></span>
                     </div>
                 </div>
                 <div id="wandorg_list"></div>
@@ -201,6 +345,15 @@ function buildUI() {
     </div>`;
 
     $('#extensions_settings2').append(html);
+
+    $('#wandorg_lang').val(getSettings().lang).on('change', function () {
+        getSettings().lang = String(this.value);
+        saveSettingsDebounced();
+        applyTranslations();
+        renderList();
+    });
+
+    applyTranslations();
 
     $('.wandorg-settings .inline-drawer-toggle').on('click', () => setTimeout(renderList, 50));
 
@@ -230,6 +383,7 @@ let timer = null;
 function scheduleApply() {
     clearTimeout(timer);
     timer = setTimeout(() => {
+        if (dragging) return;
         apply();
         if ($('#wandorg_list').is(':visible')) renderList();
     }, 150);

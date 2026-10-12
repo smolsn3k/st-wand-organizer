@@ -8,6 +8,19 @@
     opacity: 0.75;
 }
 
+.wandorg-lang {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 8px 0;
+}
+
+.wandorg-lang select {
+    flex: 1;
+    max-width: 220px;
+    margin: 0;
+}
+
 .wandorg-actions {
     display: flex;
     flex-wrap: wrap;
@@ -26,11 +39,22 @@
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    padding: 4px 8px;
-    min-height: 44px; /* comfortable touch target */
+    padding: 4px 4px 4px 8px;
+    min-height: 48px; /* comfortable touch target */
     border: 1px solid var(--SmartThemeBorderColor);
     border-radius: 8px;
     background: var(--black30a);
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.wandorg-row.wandorg-dragging {
+    position: relative;
+    z-index: 10;
+    background: var(--SmartThemeBlurTintColor, #222);
+    border-color: var(--SmartThemeQuoteColor, #aaa);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55);
+    opacity: 0.95;
 }
 
 .wandorg-label {
@@ -60,24 +84,24 @@
     white-space: nowrap;
 }
 
-.wandorg-btns {
-    display: flex;
-    gap: 4px;
+.wandorg-handle {
     flex-shrink: 0;
-}
-
-.wandorg-move {
-    width: 36px;
-    height: 36px;
-    padding: 0;
+    width: 48px;
+    height: 40px;
     display: flex;
     align-items: center;
     justify-content: center;
+    font-size: 1.2em;
+    opacity: 0.7;
+    cursor: grab;
+    touch-action: none; /* lets us drag on touch screens without scrolling the page */
+    -webkit-touch-callout: none;
 }
 
-.wandorg-move.disabled {
-    opacity: 0.25;
-    pointer-events: none;
+.wandorg-handle:active,
+.wandorg-dragging .wandorg-handle {
+    cursor: grabbing;
+    opacity: 1;
 }
 
 .wandorg-empty {
