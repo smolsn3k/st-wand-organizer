@@ -18,28 +18,19 @@ A SillyTavern extension that lets you **show/hide** and **reorder** the items in
 
 ## Installation
 
-### Option 1: Manual
+Install it through SillyTavern's built-in extension installer:
 
-1. Copy the `wand-organizer` folder into one of:
-   - `SillyTavern/public/scripts/extensions/third-party/`
-   - `SillyTavern/data/<your-user>/extensions/`
-2. Restart or reload SillyTavern.
+1. Open the **Extensions** tab (the stacked-blocks icon).
+2. Click **Install extension** (top right).
+3. Paste this URL and press **Install for all users** (or **Install just for me**):
 
-### Option 2: From a GitHub repo (easiest on mobile/Termux)
+   ```
+   https://github.com/smolsn3k/st-wand-organizer
+   ```
 
-1. Upload the folder contents to a GitHub repository.
-2. In SillyTavern, open **Extensions → Install extension**.
-3. Paste the repository URL and install.
+4. Reload SillyTavern if it doesn't refresh on its own.
 
-The folder should contain:
-
-```
-wand-organizer/
-├── manifest.json
-├── index.js
-├── style.css
-└── README.md
-```
+To update later, open the Extensions tab and use **Update all** (or the update button next to **Wand Organizer**).
 
 ## Usage
 
@@ -61,7 +52,7 @@ wand-organizer/
 
 | Problem | Fix |
 |---|---|
-| Extension doesn't show up | Check the folder path and that `manifest.json` is inside the folder. Reload the page. |
+| Extension doesn't show up | Make sure it installed without errors, then reload the page. |
 | An item is missing from the list | Enable its extension, then press **Rescan**. |
 | Order doesn't apply | Press **Rescan**, or reload the page. |
 | Page scrolls instead of dragging | Make sure you're touching the ≡ handle, not the item name. |
